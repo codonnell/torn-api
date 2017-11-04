@@ -1,7 +1,6 @@
 (ns torn-api.profile
   (:require [clojure.spec.alpha :as s]
-            [clojure.string :as string]
-            [clojure.spec.alpha :as spec])
+            [clojure.string :as string])
   (:import [java.time Instant LocalDateTime ZoneOffset]
            [java.time.temporal ChronoUnit]
            [java.time.format DateTimeFormatter]))
@@ -13,9 +12,11 @@
                 "Reporter" "Wiki Contributor" "Wiki Editor"})
 (s/def ::rank nonempty-string?)
 (s/def ::faction-id pos-int?)
+(s/def ::faction-name nonempty-string?)
 (s/def ::days-in-faction integer?)
 (s/def ::faction-position #{"None" "Member" "Leader" "Co-Leader"})
 (s/def ::spouse-id pos-int?)
+(s/def ::spouse-name nonempty-string?)
 (s/def ::days-married integer?)
 (s/def ::player-id pos-int?)
 (s/def ::donator boolean?)
@@ -33,14 +34,17 @@
 (s/def ::enemies integer?)
 (s/def ::awards integer?)
 (s/def ::forum-posts integer?)
+(s/def ::company-id pos-int?)
+(s/def ::company-position nonempty-string?)
+(s/def ::company-name nonempty-string?)
 
 (s/def ::profile
   (s/keys :req [::role ::rank ::player-id ::donator ::property ::name
                 ::signup ::karma ::current-life ::maximum-life ::level
                 ::friends ::last-action ::gender ::enemies ::awards
                 ::forum-posts]
-          :opt [::faction-id ::days-in-faction ::faction-position
-                ::spouse-id ::days-married]))
+          :opt [::faction-id ::faction-name ::days-in-faction ::faction-position
+                ::spouse-id ::spouse-name ::days-married]))
 
 (defn zero->nil [n]
   (if (= 0 n) nil n))
@@ -67,9 +71,11 @@
   {::role {:path [:role]}
    ::rank {:path [:rank]}
    ::faction-id {:path [:faction :faction_id] :coercer zero->nil}
+   ::faction-name {:path [:faction :faction_name]}
    ::days-in-faction {:path [:faction :days_in_faction]}
    ::faction-position {:path [:faction :position]}
    ::spouse-id {:path [:married :spouse_id] :coercer zero->nil}
+   ::spouse-name {:path [:married :spouse_name]}
    ::days-married {:path [:married :duration]}
    ::player-id {:path [:player_id]}
    ::donator {:path [:donator] :coercer #(if (= 1 %) true false)}
@@ -86,17 +92,33 @@
    ::gender {:path [:gender]}
    ::enemies {:path [:enemies]}
    ::awards {:path [:awards]}
-   ::forum-posts {:path [:forum_posts]}})
+   ::forum-posts {:path [:forum_posts]}
+   ::company-id {:path [:job :company_id] :coercer zero->nil}
+   ::company-name {:path [:job :company_name]}
+   ::company-position {:path [:job :position]}})
+
+(def dependent-keys
+  {::faction-id [::faction-id ::faction-position ::faction-name ::days-in-faction]
+   ::spouse-id [::spouse-id ::days-married ::spouse-name]
+   ::company-id [::company-id ::company-name ::company-position]})
 
 (defn remove-marriage-length-from-unmarried [m]
   (if-not (contains? m ::spouse-id)
-    (dissoc m ::days-married)
+    (dissoc m ::days-married ::spouse-name)
     m))
 
 (defn remove-faction-info-from-unfactioned [m]
   (if-not (contains? m ::faction-id)
-    (dissoc m ::faction-position ::days-in-faction)
+    (dissoc m ::faction-position ::days-in-faction ::faction-name)
     m))
+
+(defn remove-dependent-keys [response]
+  (reduce-kv (fn [m k dep-ks]
+               (if-not (contains? response k)
+                 (apply dissoc m dep-ks)
+                 m))
+             response
+             dependent-keys))
 
 (defn coerce
   "Coerces a profile API response so that it satisfies the :torn-api.profile/profile spec."
@@ -106,10 +128,9 @@
                      (if (nil? v) m (assoc m k v))))
                  {}
                  key-coercions)
-      remove-marriage-length-from-unmarried
-      remove-faction-info-from-unfactioned))
+      remove-dependent-keys))
 
 (defn valid?
   "Checks whether an already-coerced response matches the :torn-api.profile/profile spec."
   [profile]
-  (spec/valid? ::profile profile))
+  (s/valid? ::profile profile))

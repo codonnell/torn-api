@@ -66,10 +66,12 @@
         coerced #:torn-api.profile{:role "Civilian"
                                    :maximum-life 4612
                                    :spouse-id 1897243
+                                   :spouse-name "HandsomePants"
                                    :donator true
                                    :property "Private Island"
                                    :name "sullengenie"
                                    :days-in-faction 385
+                                   :faction-name "JFC"
                                    :rank "Supreme Antagonist"
                                    :signup (Instant/parse "2015-07-23T20:15:29Z")
                                    :status ["Okay" ""]
@@ -84,7 +86,10 @@
                                    :gender "Male"
                                    :enemies 9
                                    :faction-position "Member"
-                                   :awards 242}]
+                                   :awards 242
+                                   :company-id 48912
+                                   :company-name "JFC Cruisin"
+                                   :company-position "Employee"}]
     (is (= coerced (-> uncoerced profile/coerce (dissoc ::profile/last-action))))
     (is (instants-within? (. (Instant/now) minusSeconds (* 4 60))
                           (-> uncoerced profile/coerce ::profile/last-action)
