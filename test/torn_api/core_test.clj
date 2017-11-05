@@ -67,16 +67,19 @@
             :timestamp 100}
            (c/query-params (assoc request ::c/timestamp (Instant/ofEpochSecond 100)))))))
 
-(defn mock-client
+(defn const-client
   "Returns a torn-api.core/ApiClient which responds to every request with response"
   [response]
   (reify c/ApiClient
     (http-get [_ request _] (assoc response ::c/request request))))
 
-(defn mock-success
+(defn success-resp [body]
+  {:status 200 :headers {"Content-Type" "application/json"} :body (json/encode body)})
+
+(defn const-success-client
   "Returns a torn-api.core/ApiClient with a 200 response whose body is the passed in body, json-encoded."
   [body]
-  (mock-client {:status 200 :headers {"Content-Type" "application/json"} :body (json/encode body)}))
+  (const-client (success-resp body)))
 
 (deftest test-fetch
   (let [request {::c/endpoint :user
@@ -87,7 +90,40 @@
               :player_id 1
               :name "Player"
               :status ["Okay" ""]}
-        client (mock-success body)]
+        client (const-success-client body)]
     (is (= body (-> (c/fetch request {} client) :body)))
     (is (= request (-> (c/fetch request {} client) ::c/request)))
-    (is (thrown? Throwable (c/fetch {} client)))))
+    (is (thrown? clojure.lang.ExceptionInfo (c/fetch {} client)))))
+
+(defn mock-client
+  "Returns a torn-api.core/ApiClient which responds to a request with (handler request)"
+  [handler]
+  (reify c/ApiClient
+    (http-get [_ request _]
+      (assoc (handler request) ::c/request request))))
+
+(deftest test-pfetch
+  (let [req1 {::c/endpoint :user
+              ::c/selections [:basic]
+              ::c/key "foo1"}
+        req2 {::c/endpoint :user
+              ::c/selections [:basic]
+              ::c/key "foo2"}
+        resp1 {:level 1
+               :gender "Female"
+               :player_id 1
+               :name "Player1"
+               :status ["Okay" ""]}
+        resp2 {:level 1
+               :gender "Male"
+               :player_id 2
+               :name "Player2"
+               :status ["Okay" ""]}
+        client (mock-client (fn [req] (condp = (::c/key req)
+                                        "foo1" (success-resp resp1)
+                                        "foo2" (success-resp resp2))))]
+    (is (= [resp1 resp2]
+           (mapv :body (c/pfetch [req1 req2] {} client))))
+    (is (contains? (first (c/pfetch [{}] {} client)) ::s/problems))
+    (is (instance? Throwable (first (c/pfetch [req1] {} (mock-client (fn [req]
+                                                                       (throw (Exception.))))))))))

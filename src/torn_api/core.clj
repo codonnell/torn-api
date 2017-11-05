@@ -50,3 +50,32 @@
      (-> (http-get client request opts)
          process-response)
      (throw (ex-info "Invalid request" (spec/explain-data ::request request))))))
+
+(defn pfetch
+  "Executes the requests with a connection pool, passing opts to client. The
+  keys :torn-api.core/timeout, :torn-api.core/threads, :torn-api.core/insecure?,
+  and :torn-api.core/default-per-route will be passed along to the connection
+  manager. Returns a vector containing the response objects. If a request is
+  invalid, returns a map with error data in place of the response. If an
+  exception is otherwise thrown while getting hte response, the exception will
+  be return in place of the response. client must implement the
+  torn-api.core/ApiClient protocol. By default, uses torn-api.core/api-client, a
+  thin wrapper around clj-http.client. Consult the clj-http documentation for
+  available opts."
+  ([requests]
+   (pfetch requests {}))
+  ([requests opts]
+   (pfetch requests opts api-client))
+  ([requests
+    {:keys [::timeout ::threads ::insecure? ::default-per-route] :as opts}
+    client]
+   (http/with-connection-pool {:timeout timeout :threads threads :insecure? insecure?
+                               :default-per-route default-per-route}
+     (mapv (fn [request]
+             (try
+               (fetch request opts client)
+               (catch clojure.lang.ExceptionInfo e
+                 (ex-data e))
+               (catch Throwable e
+                 e)))
+           requests))))
