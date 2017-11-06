@@ -21,7 +21,7 @@
   (format "https://api.torn.com/%s/%s" (name endpoint) (or id "")))
 
 (defn query-params [request]
-  {:selections (mapv name (::selections request))
+  {:selections (string/join "," (mapv name (::selections request)))
    :key (::key request)
    :timestamp (when-let [t (::timestamp request)] (.getEpochSecond t))})
 
