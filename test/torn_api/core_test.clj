@@ -2,7 +2,9 @@
   (:require [clojure.test :refer [deftest is]]
             [clojure.spec.alpha :as s]
             [cheshire.core :as json]
-            [torn-api.core :as c])
+            [torn-api.core :as c]
+            [torn-api.profile :as profile]
+            [torn-api.personal-stats :as pstats])
   (:import [java.time Instant]))
 
 (deftest test-endpoint
@@ -58,11 +60,11 @@
                  ::c/selections [:profile :battlestats]
                  ::c/key "apikey"
                  ::c/timestamp (Instant/EPOCH)}]
-    (is (= {:selections ["profile" "battlestats"]
+    (is (= {:selections "profile,battlestats"
             :key "apikey"
             :timestamp 0}
            (c/query-params request)))
-    (is (= {:selections ["profile" "battlestats"]
+    (is (= {:selections "profile,battlestats"
             :key "apikey"
             :timestamp 100}
            (c/query-params (assoc request ::c/timestamp (Instant/ofEpochSecond 100)))))))
@@ -93,7 +95,57 @@
         client (const-success-client body)]
     (is (= body (-> (c/fetch request {} client) :body)))
     (is (= request (-> (c/fetch request {} client) ::c/request)))
-    (is (thrown? clojure.lang.ExceptionInfo (c/fetch {} client)))))
+    (is (thrown? clojure.lang.ExceptionInfo (c/fetch {} client))))
+  (let [request #::c{:endpoint :user
+                     :key "foo"
+                     :selections [:profile :personalstats]}
+        body {:role "Civilian"
+              :faction {:position "Member"
+                        :faction_id 16628
+                        :days_in_faction 389
+                        :faction_name "JFC"}
+              :married {:spouse_id 1897243
+                        :spouse_name "HandsomePants"
+                        :duration 835}
+              :age 836
+              :property_id 260150
+              :donator 1
+              :property "Private Island"
+              :name "sullengenie"
+              :player_id 1946152
+              :rank "Idolised Antagonist"
+              :signup "2015-07-23 20:15:29"
+              :karma 484
+              :icons {:icon6 "Male"
+                      :icon3 "Donator"
+                      :icon4 "Subscriber"
+                      :icon8 "Married - To HandsomePants"
+                      :icon27 "Company - Employee of Just Fer Cruisin (Cruise Line)"
+                      :icon9 "Faction - Member of JFC"
+                      :icon35 "Bazaar - This person has items in their bazaar for sale"}
+              :life {:current 4612
+                     :maximum 4612
+                     :increment 276
+                     :interval 300
+                     :ticktime 120
+                     :fulltime 0}
+              :level 64
+              :friends 48
+              :status ["Okay" ""]
+              :last_action "2 minutes ago"
+              :gender "Male"
+              :enemies 9
+              :awards 243
+              :forum_posts 542
+              :job {:position "Employee"
+                    :company_id 48912
+                    :company_name "Just Fer Cruisin"}
+              :personalstats {:hospital 1815
+                              :logins 2295}}
+        client (const-success-client body)]
+    (is (not (nil? (-> (c/fetch request {::c/coerce? true} client) :body ::profile/player-id))))
+    (is (not (nil? (-> (c/fetch request {::c/coerce? true} client) :body ::pstats/logins))))
+    (is (nil? (-> (c/fetch request {::c/coerce? true} client) :body :role)))))
 
 (defn mock-client
   "Returns a torn-api.core/ApiClient which responds to a request with (handler request)"
@@ -127,3 +179,56 @@
     (is (contains? (first (c/pfetch [{}] {} client)) ::s/problems))
     (is (instance? Throwable (first (c/pfetch [req1] {} (mock-client (fn [req]
                                                                        (throw (Exception.))))))))))
+
+(deftest test-coerce
+  (let [response {::c/request #::c{:endpoint :user
+                                   :key "foo"
+                                   :selections [:profile :personalstats]}
+                  :body {:role "Civilian"
+                         :faction {:position "Member"
+                                   :faction_id 16628
+                                   :days_in_faction 389
+                                   :faction_name "JFC"}
+                         :married {:spouse_id 1897243
+                                   :spouse_name "HandsomePants"
+                                   :duration 835}
+                         :age 836
+                         :property_id 260150
+                         :donator 1
+                         :property "Private Island"
+                         :name "sullengenie"
+                         :player_id 1946152
+                         :rank "Idolised Antagonist"
+                         :signup "2015-07-23 20:15:29"
+                         :karma 484
+                         :icons {:icon6 "Male"
+                                 :icon3 "Donator"
+                                 :icon4 "Subscriber"
+                                 :icon8 "Married - To HandsomePants"
+                                 :icon27 "Company - Employee of Just Fer Cruisin (Cruise Line)"
+                                 :icon9 "Faction - Member of JFC"
+                                 :icon35 "Bazaar - This person has items in their bazaar for sale"}
+                         :life {:current 4612
+                                :maximum 4612
+                                :increment 276
+                                :interval 300
+                                :ticktime 120
+                                :fulltime 0}
+                         :level 64
+                         :friends 48
+                         :status ["Okay" ""]
+                         :last_action "2 minutes ago"
+                         :gender "Male"
+                         :enemies 9
+                         :awards 243
+                         :forum_posts 542
+                         :job {:position "Employee"
+                               :company_id 48912
+                               :company_name "Just Fer Cruisin"}
+                         :personalstats {:hospital 1815
+                                         :logins 2295}}}
+        coerced (c/coerce response)]
+    (is (= (-> response :body :player_id) (-> coerced :body ::profile/player-id)))
+    (is (= (-> response :body :life :maximum) (-> coerced :body ::profile/maximum-life)))
+    (is (= (-> response :body :personalstats :hospital) (-> coerced :body ::pstats/times-hospitalized)))
+    (is (thrown? Throwable (c/coerce (assoc-in response [::c/request ::c/selections] [:unsupported]))))))
