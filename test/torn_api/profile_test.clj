@@ -88,7 +88,7 @@
                                    :faction-position "Member"
                                    :awards 242
                                    :company-id 48912
-                                   :company-name "JFC Cruisin"
+                                   :company-name "Just Fer Cruisin"
                                    :company-position "Employee"}]
     (is (= coerced (-> uncoerced profile/coerce (dissoc ::profile/last-action))))
     (is (instants-within? (. (Instant/now) minusSeconds (* 4 60))
