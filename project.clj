@@ -1,4 +1,4 @@
-(defproject torn-api "0.1.0-SNAPSHOT"
+(defproject torn-api "0.1.0"
   :description "Client for Torn API"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
